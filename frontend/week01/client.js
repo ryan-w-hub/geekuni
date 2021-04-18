@@ -29,8 +29,41 @@ class Request {
   send(connection) {
     return new Promise((resolve, reject) => {
       const parser = new ResponseParser();
-      resolve("");
+      if (connection) {
+        connection.write(this.toString());
+      } else {
+        connection = net.createConnection(
+          {
+            host: this.host,
+            port: this.port
+          },
+          () => {
+            connection.write(this.toString());
+          }
+        );
+      }
+
+      connection.on("data", (data) => {
+        console.log("data: ", data.toString());
+        parser.receive(data.toString());
+        if (parser.isFinished) {
+          resolve(parser.response);
+          connection.end();
+        }
+      });
+
+      connection.on("error", (err) => {
+        console.error("connection error:".err);
+        reject(err);
+        connection.end();
+      });
     });
+  }
+
+  toString() {
+    return `${this.method} ${this.path} HTTP/1.1\r\n${Object.keys(this.headers)
+      .map((k) => `${k}: ${this.headers[k]}`)
+      .join("\r\n")}\r\n\r\n${this.bodyText}`;
   }
 }
 
