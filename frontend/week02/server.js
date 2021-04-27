@@ -23,15 +23,17 @@ http
         background-color: #ff5000;
       }
 
-      body div img {
+      body div.container img.myClass {
         width: 30px;
         background-color: #ff1111;
       }
     </style>
   </head>
   <body>
-    <img id="myId" />
-    <img />
+    <div class="container">
+      <img id="myId" />
+      <img class="myClass" />
+    </div>
   </body>
 </html>`);
       });

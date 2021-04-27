@@ -1,3 +1,5 @@
+const css = require("css");
+
 const EOF = Symbol("EOF");
 
 const RegExpASCIIAlpha = /^[a-zA-Z]$/;
@@ -14,6 +16,7 @@ let currentAttribute = null;
 let currentTextNode = null;
 
 const stack = [{ type: "document", children: [] }];
+const rules = [];
 
 function emit(token) {
   let top = stack[stack.length - 1];
@@ -35,6 +38,9 @@ function emit(token) {
       }
     }
 
+    // 入栈前计算
+    computeCss(element);
+
     top.children.push(element);
     element.parent = top;
 
@@ -45,6 +51,10 @@ function emit(token) {
     if (top.tagName !== token.tagName) {
       throw new Error("Tag start end doesn't matched!");
     } else {
+      // 收集css规则
+      if (top.tagName === "style") {
+        addCssRules(top.children[0].content);
+      }
       stack.pop();
     }
     currentTextNode = null;
@@ -59,6 +69,115 @@ function emit(token) {
     }
     currentTextNode.content += token.content;
   }
+}
+
+function addCssRules(text) {
+  const ast = css.parse(text);
+  // console.log(JSON.stringify(ast));
+  console.log(JSON.stringify(ast, null, "   "));
+  rules.push(...ast.stylesheet.rules);
+}
+
+function computeCss(element) {
+  // 父级元素列表
+  const elements = stack.slice().reverse();
+
+  if (!element.computedStyle) element.computedStyle = {};
+
+  for (let rule of rules) {
+    const selectorParts = rule.selectors[0].split(" ").reverse();
+
+    // 先匹配当前元素
+    if (!match(element, selectorParts[0])) continue;
+
+    let matched = false;
+
+    let j = 1;
+    for (let i = 0; i < elements.length; i++) {
+      if (match(elements[i], selectorParts[j])) j++;
+    }
+
+    if (j >= selectorParts.length) {
+      matched = true;
+    }
+
+    if (matched) {
+      const sp = specificity(rule.selectors[0]);
+      const _computedStyle = element.computedStyle;
+
+      for (let declaration of rule.declarations) {
+        if (!_computedStyle[declaration.property]) {
+          _computedStyle[declaration.property] = {};
+        }
+
+        if (
+          !_computedStyle[declaration.property].specificity ||
+          compare(_computedStyle[declaration.property].specificity, sp) < 0
+        ) {
+          _computedStyle[declaration.property].value = declaration.value;
+          _computedStyle[declaration.property].specificity = sp;
+        }
+      }
+    }
+  }
+}
+
+function compare(sp1, sp2) {
+  if (sp1[0] - sp2[0]) {
+    return sp1[0] - sp2[0];
+  } else if (sp1[1] - sp2[1]) {
+    return sp1[1] - sp2[1];
+  } else if (sp1[2] - sp2[2]) {
+    return sp1[2] - sp2[2];
+  }
+  return sp1[3] - sp2[3];
+}
+
+function match(element, selector) {
+  if (!selector || !element.attributes) return false;
+
+  // 拆分复合选择器
+  const _selectors = selector.match(
+    /(^[a-zA-Z]+(?![a-zA-Z]))|(\.[a-zA-Z]+(?![a-zA-Z]))|(#[a-zA-Z]+$)/g
+  );
+  if (!_selectors) return false;
+
+  // 确保每个选择器都匹配
+  return _selectors.every((_selector) => {
+    if (_selector.charAt(0) === "#") {
+      const attr = element.attributes.filter((a) => a.name === "id")[0];
+      return !!attr && attr.value === _selector.replace("#", "");
+    } else if (_selector.charAt(0) === ".") {
+      const attr = element.attributes.filter((a) => a.name === "class")[0];
+      return (
+        !!attr && attr.value.split(" ").includes(_selector.replace(".", ""))
+      );
+    } else {
+      return element.tagName === _selector;
+    }
+  });
+}
+
+function specificity(selector) {
+  const tuple = [0, 0, 0, 0];
+  const selectorParts = selector.split(" ");
+  for (let part of selectorParts) {
+    const _subParts = part.match(
+      /(^[a-zA-Z]+(?![a-zA-Z]))|(\.[a-zA-Z]+(?![a-zA-Z]))|(#[a-zA-Z]+$)/g
+    );
+    if (!_subParts) continue;
+
+    for (let _sp of _subParts) {
+      if (_sp.charAt(0) === "#") {
+        tuple[1] += 1;
+      } else if (_sp.charAt(0) === ".") {
+        tuple[2] += 1;
+      } else {
+        tuple[3] += 1;
+      }
+    }
+  }
+  return tuple;
 }
 
 /** 13.2.5.1 Data state */
