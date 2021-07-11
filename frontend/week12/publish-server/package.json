@@ -1,0 +1,13 @@
+{
+  "name": "publish-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "star": "node ./server.js",
+    "publish": "scp -r -P 8022 ./* ryan@127.0.0.1:/home/ryan/publish-server"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "unzipper": "0.10.11"
+  }
+}
